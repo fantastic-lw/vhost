@@ -3,10 +3,26 @@
 ## [Unreleased]
 
 ### Added
-- [[#355]](https://github.com/rust-vmm/vhost/pull/355) Add socket-cloning helpers for backend request handlers.
 ### Changed
 ### Deprecated
 ### Fixed
+- [[#378]](https://github.com/rust-vmm/vhost/pull/378) Allow `REM_MEM_REG` requests to carry a file
+  descriptor for spec compliance against older incorrect implementations.
+
+## v0.17.0
+
+### Added
+- [[#355]](https://github.com/rust-vmm/vhost/pull/355) Add socket-cloning helpers for backend request handlers.
+- [[#360]](https://github.com/rust-vmm/vhost/pull/360) Validate AF_UNIX SOCK_STREAM socket file descriptors and
+  add Error::InvalidSocketFd, Error::NotUnixSocket and Error::NotStreamSocket.
+
+### Changed
+- [[#364]](https://github.com/rust-vmm/vhost/pull/364) Updated vm-memory to 0.18.0
+- [[#366]](https://github.com/rust-vmm/vhost/pull/366) Update virtio-bindings to v0.2.7
+
+### Fixed
+- [[#367]](https://github.com/rust-vmm/vhost/pull/367) Fix `SHMEM` protocol feature bit position (bit 21 → bit 22)
+  to align with the vhost-user spec, and add missing `GPA_ADDRESSES` at bit 21.
 
 ## v0.16.0
 

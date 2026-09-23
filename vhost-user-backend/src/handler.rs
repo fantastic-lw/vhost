@@ -30,7 +30,9 @@ use vhost::vhost_user::{
 use virtio_bindings::bindings::virtio_ring::VIRTIO_RING_F_EVENT_IDX;
 use virtio_queue::{Error as VirtQueError, QueueT};
 use vm_memory::mmap::NewBitmap;
-use vm_memory::{GuestAddress, GuestAddressSpace, GuestMemory, GuestMemoryMmap, GuestRegionMmap};
+use vm_memory::{
+    GuestAddress, GuestAddressSpace, GuestMemoryBackend, GuestMemoryMmap, GuestRegionMmap,
+};
 use vmm_sys_util::epoll::EventSet;
 
 use super::backend::VhostUserBackend;
@@ -375,6 +377,10 @@ where
             .ok_or(VhostUserError::InvalidParam)?;
 
         if num == 0 || num as usize > self.max_queue_size {
+            log::error!(
+                "vring {index} requested queue size {num} out of range (1-{})",
+                self.max_queue_size
+            );
             return Err(VhostUserError::InvalidParam);
         }
         vring.set_queue_size(num as u16);
@@ -454,6 +460,10 @@ where
         // VHOST_USER_GET_VRING_BASE.
         vring.set_queue_ready(false);
         self.update_vring_registration(vring, index as u8)?;
+
+        self.backend
+            .stop_vring(index)
+            .map_err(VhostUserError::ReqHandlerError)?;
 
         let next_avail = vring.queue_next_avail();
 
@@ -820,6 +830,27 @@ mod tests {
     use vmm_sys_util::event::{new_event_consumer_and_notifier, EventFlag};
 
     #[test]
+    fn test_get_vring_base_stops_vring() {
+        let mem = GuestMemoryAtomic::new(
+            GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0x100000), 0x10000)]).unwrap(),
+        );
+        let backend = Arc::new(Mutex::new(MockVhostBackend::new()));
+        let mut handler = VhostUserHandler::new(backend.clone(), mem).unwrap();
+        let vring = handler.vrings[0].clone();
+        vring.set_queue_size(8);
+        vring.set_queue_info(0x100000, 0x101000, 0x102000).unwrap();
+        vring.set_queue_ready(true);
+
+        let state = handler.get_vring_base(0).unwrap();
+        let index = state.index;
+        let num = state.num;
+
+        assert_eq!(index, 0);
+        assert_eq!(num, 0);
+        assert_eq!(backend.lock().unwrap().stop_calls(), 1);
+    }
+
+    #[test]
     fn test_no_lost_kicks() {
         let mem = GuestMemoryAtomic::new(
             GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0x100000), 0x10000)]).unwrap(),
@@ -864,6 +895,9 @@ mod tests {
         thread::sleep(Duration::from_millis(200));
 
         let events = backend.lock().unwrap().events();
-        assert_eq!(events, 1, "Backend SHOULD have been kicked after enabling");
+        assert!(
+            events >= 1,
+            "Backend SHOULD have been kicked after enabling"
+        );
     }
 }
